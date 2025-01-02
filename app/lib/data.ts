@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres';
+import { neon } from '@neondatabase/serverless';
 import {
   CustomerField,
   CustomersTableType,
@@ -9,6 +9,8 @@ import {
 } from './definitions';
 import { formatCurrency } from './utils';
 
+const sql = neon(process.env.DATABASE_URL as string);
+
 export async function fetchRevenue() {
   try {
     // Artificially delay a response for demo purposes.
@@ -17,11 +19,10 @@ export async function fetchRevenue() {
     // console.log('Fetching revenue data...');
     // await new Promise((resolve) => setTimeout(resolve, 3000));
 
-    const data = await sql<Revenue>`SELECT * FROM revenue`;
+    const data = await sql`SELECT * FROM revenue` as Revenue[];
 
     // console.log('Data fetch completed after 3 seconds.');
-
-    return data.rows;
+    return data;
   } catch (error) {
     console.error('Database Error:', error);
     throw new Error('Failed to fetch revenue data.');
@@ -30,15 +31,18 @@ export async function fetchRevenue() {
 
 export async function fetchLatestInvoices() {
   try {
-    const data = await sql<LatestInvoiceRaw>`
+    const data = await sql`
       SELECT invoices.amount, customers.name, customers.image_url, customers.email, invoices.id
       FROM invoices
       JOIN customers ON invoices.customer_id = customers.id
       ORDER BY invoices.date DESC
-      LIMIT 5`;
+      LIMIT 5` as LatestInvoiceRaw[];
 
-    const latestInvoices = data.rows.map((invoice) => ({
-      ...invoice,
+    const latestInvoices = data.map((invoice) => ({
+      id: invoice.id,
+      name: invoice.name,
+      image_url: invoice.image_url,
+      email: invoice.email,
       amount: formatCurrency(invoice.amount),
     }));
     return latestInvoices;
@@ -66,17 +70,12 @@ export async function fetchCardData() {
       invoiceStatusPromise,
     ]);
 
-    const numberOfInvoices = Number(data[0].rows[0].count ?? '0');
-    const numberOfCustomers = Number(data[1].rows[0].count ?? '0');
-    const totalPaidInvoices = formatCurrency(data[2].rows[0].paid ?? '0');
-    const totalPendingInvoices = formatCurrency(data[2].rows[0].pending ?? '0');
-
     return {
-      numberOfCustomers,
-      numberOfInvoices,
-      totalPaidInvoices,
-      totalPendingInvoices,
-    };
+      numberOfInvoices: Number(data[0][0].count ?? '0'),
+      numberOfCustomers: Number(data[1][0].count ?? '0'),
+      totalPaidInvoices: formatCurrency(Number(data[2][0].paid ?? '0')),
+      totalPendingInvoices: formatCurrency(Number(data[2][0].pending ?? '0'))
+    }
   } catch (error) {
     console.error('Database Error:', error);
     throw new Error('Failed to fetch card data.');
